@@ -1,21 +1,19 @@
-# yagyazo
+# luigi
 
-yet another gyazo.
+yet another gyazo for google image searcher with flipped image.
 
 ## install
 
-    go get github.com/sheercat/yagyazo
+    go get github.com/sheercat/luigi
 
 ## Getting Started
 
-   $ yagyazo
+   $ luigi
 
-   $ yagyazo --port=9090
-
-   $ yagyazo --user=basic --pass=auth
+   $ luigi --port=9090
 
 ## License
 
-yagyazo licensed under the MIT
+licensed under the MIT
 
 

@@ -11,7 +11,9 @@ import (
 	"path"
 	"strconv"
 	"time"
-	_ "github.com/disintegration/gift"
+	"github.com/disintegration/gift"
+	"image"
+	"image/png"
 	"strings"
 )
 
@@ -43,7 +45,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer file.Close()
-	basename := strconv.FormatInt(time.Now().UnixNano(), 10) + ".jpg"
+	basename := strconv.FormatInt(time.Now().UnixNano(), 10) + ".png"
 	imagefile := path.Join(imagedir, basename)
 	out, err := os.Create(imagefile)
 	if err != nil {
@@ -59,7 +61,10 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// pp.Print(header)
-	fmt.Fprintf(w, "http://%s/images/%s", r.Host, basename)
+	// fmt.Fprintf(w, "http://%s/images/%s", r.Host, basename)
+	fmt.Fprintf(w, "http://%s/similar1/%s,", r.Host, basename)
+	fmt.Fprintf(w, "http://%s/similar2/%s", r.Host, basename)
+	log.Println(r.Host)
 }
 
 func checkAuth(w http.ResponseWriter, r *http.Request) bool {
@@ -73,6 +78,23 @@ func checkAuth(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return username == *basicAuthUser && password == *basicAuthPass
+}
+
+func imageURL(r *http.Request, path string) string {
+	return fmt.Sprintf("http://%s%s", r.Host, strings.Replace(r.URL.Path, path, "images", 1))
+}
+
+func imageSearchURL(url string) string {
+	return fmt.Sprintf(`https://www.google.co.jp/searchbyimage?image_content=&filename=&safe=off&hl=ja&authuser=0&image_url=%s`, url)
+}
+
+func imagePath(r *http.Request, replace string) ( string, error ) {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+	return path.Join(dir, strings.Replace(r.URL.Path, replace, "images", 1)), nil
 }
 
 func imagesHandler(w http.ResponseWriter, r *http.Request) {
@@ -90,21 +112,60 @@ func imagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// pp.Print(r)
 	imagefile := path.Join(dir, r.URL.Path)
-	// pp.Print(imagefile)
+	log.Println(imagefile)
 	http.ServeFile(w, r, imagefile)
 }
 
-func similarHandler(w http.ResponseWriter, r *http.Request) {
-	if checkAuth(w, r) == false {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Atto"`)
-		w.WriteHeader(401)
-		w.Write([]byte("401 Unauthorized\n"))
+func similar1Handler(w http.ResponseWriter, r *http.Request) {
+	url := imageSearchURL(imageURL(r, "similar1"))
+	log.Println(url)
+	http.Redirect(w, r, url, 302)
+}
+
+func similar2Handler(w http.ResponseWriter, r *http.Request) {
+	img, err := imagePath(r, "similar2")
+	if err != nil {
+		log.Println("get image path", err)
+		return
+	}
+	in, err := os.Open(img)
+	if err != nil {
+		log.Println("error open file", err)
+		return
+	}
+	defer in.Close()
+
+	src, err := png.Decode(in)
+	if err != nil {
+		log.Println("error open file", err)
 		return
 	}
 
-	seed := strings.Replace(r.URL.Path, "similarity", "images", 1)
-	url := fmt.Sprintf(`https://www.google.co.jp/searchbyimage?image_content=&filename=&safe=off&hl=ja&authuser=0image_url=%s`, seed)
-	http.Redirect(w, r, url, 302)
+	g := gift.New(gift.FlipHorizontal())
+	dst := image.NewRGBA(g.Bounds(src.Bounds()))
+	g.Draw(dst, src)
+
+	outFile := strings.Replace(img, ".png", "_flipH.png", 1)
+
+	out, err := os.OpenFile(outFile, os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		log.Println("error open file", err)
+		return
+	}
+	defer out.Close()
+
+	err = png.Encode(out, dst)
+	if err != nil {
+		log.Println("error encode file", err)
+		return
+	}
+
+	url := imageSearchURL(imageURL(r, "similar2"))
+	log.Println(url)
+	url2 := strings.Replace(url, ".png", "_flipH.png", 1)
+	log.Println(url2)
+
+	http.Redirect(w, r, url2, 302)
 }
 
 func main() {
@@ -116,7 +177,8 @@ func main() {
 
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/images/", imagesHandler)
-	http.HandleFunc("/similarity/", similarHandler)
+	http.HandleFunc("/similar1/", similar1Handler)
+	http.HandleFunc("/similar2/", similar2Handler)
 	http.HandleFunc("/upload", uploadHandler)
 	log.Fatal(http.ListenAndServe(":"+*portNumber, nil))
 }
