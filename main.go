@@ -77,7 +77,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	// pp.Print(header)
 	// fmt.Fprintf(w, "http://%s/images/%s", r.Host, basename)
 	if r.URL.RawQuery == "cannotmulti" {
-		url := fmt.Sprintf("http://%s/similar/%s,", r.Host, basename)
+		url := fmt.Sprintf("http://%s/similar/%s", r.Host, basename)
 		fmt.Fprintf(w, "%s", url)
 	} else {
 		url1 := fmt.Sprintf("http://%s/similar1/%s,", r.Host, basename)
