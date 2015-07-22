@@ -3,18 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/disintegration/gift"
 	_ "github.com/k0kubun/pp"
+	"image"
+	"image/png"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path"
 	"strconv"
-	"time"
-	"github.com/disintegration/gift"
-	"image"
-	"image/png"
 	"strings"
+	"time"
 )
 
 var portNumber = flag.String("port", "8080", "port number.")
@@ -23,6 +23,18 @@ var basicAuthPass = flag.String("pass", "", "basic auth user pass")
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "hello")
+}
+
+func printMultiPage(w http.ResponseWriter, url1 string, url2 string) {
+	fmt.Fprintf(w, `<html><head><title>luigi</title></head>
+<body>
+<script>
+window.open('%s', 'url1', 'width=600, height=600, menubar=no, toolbar=no, scrollbars=yes');
+window.open('%s', 'url2', 'width=600, height=600, menubar=no, toolbar=no, scrollbars=yes');
+</script>
+</body>
+</html>
+`, url1, url2)
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -60,11 +72,18 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println(r.Host)
+
 	// pp.Print(header)
 	// fmt.Fprintf(w, "http://%s/images/%s", r.Host, basename)
-	fmt.Fprintf(w, "http://%s/similar1/%s,", r.Host, basename)
-	fmt.Fprintf(w, "http://%s/similar2/%s", r.Host, basename)
-	log.Println(r.Host)
+	if r.URL.RawQuery == "cannotmulti" {
+		url := fmt.Sprintf("http://%s/similar/%s,", r.Host, basename)
+		fmt.Fprintf(w, "%s", url)
+	} else {
+		url1 := fmt.Sprintf("http://%s/similar1/%s,", r.Host, basename)
+		url2 := fmt.Sprintf("http://%s/similar2/%s,", r.Host, basename)
+		fmt.Fprintf(w, "%s,%s", url1, url2)
+	}
 }
 
 func checkAuth(w http.ResponseWriter, r *http.Request) bool {
@@ -80,15 +99,15 @@ func checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	return username == *basicAuthUser && password == *basicAuthPass
 }
 
-func imageURL(r *http.Request, path string) string {
-	return fmt.Sprintf("http://%s%s", r.Host, strings.Replace(r.URL.Path, path, "images", 1))
+func imageURL(r *http.Request, replace string, replaceTo string) string {
+	return fmt.Sprintf("http://%s%s", r.Host, strings.Replace(r.URL.Path, replace, replaceTo, 1))
 }
 
 func imageSearchURL(url string) string {
 	return fmt.Sprintf(`https://www.google.co.jp/searchbyimage?image_content=&filename=&safe=off&hl=ja&authuser=0&image_url=%s`, url)
 }
 
-func imagePath(r *http.Request, replace string) ( string, error ) {
+func imagePath(r *http.Request, replace string) (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Println(err)
@@ -116,8 +135,15 @@ func imagesHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, imagefile)
 }
 
+func similarHandler(w http.ResponseWriter, r *http.Request) {
+	url1 := imageURL(r, "similar", "similar1")
+	url2 := imageURL(r, "similar", "similar2")
+	log.Println(url1)
+	printMultiPage(w, url1, url2)
+}
+
 func similar1Handler(w http.ResponseWriter, r *http.Request) {
-	url := imageSearchURL(imageURL(r, "similar1"))
+	url := imageSearchURL(imageURL(r, "similar1", "images"))
 	log.Println(url)
 	http.Redirect(w, r, url, 302)
 }
@@ -160,7 +186,7 @@ func similar2Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := imageSearchURL(imageURL(r, "similar2"))
+	url := imageSearchURL(imageURL(r, "similar2", "images"))
 	log.Println(url)
 	url2 := strings.Replace(url, ".png", "_flipH.png", 1)
 	log.Println(url2)
@@ -177,6 +203,7 @@ func main() {
 
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/images/", imagesHandler)
+	http.HandleFunc("/similar/", similarHandler)
 	http.HandleFunc("/similar1/", similar1Handler)
 	http.HandleFunc("/similar2/", similar2Handler)
 	http.HandleFunc("/upload", uploadHandler)
